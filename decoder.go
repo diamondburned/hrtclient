@@ -19,13 +19,30 @@ type Decoder interface {
 
 // DefaultDecoder is the default decoder to use.
 // It is the inverse counterpart of [hrt.DefaultOpts].
-var DefaultDecoder = ValidatedDecoder(StatusDecoder{
-	Status1xx: NoDecoder,
-	Status2xx: JSONCodec,
-	Status3xx: NoDecoder,
-	Status4xx: JSONErrorDecoder("error"),
-	Status5xx: JSONErrorDecoder("error"),
+var DefaultDecoder = ValidatedDecoder(ErrorHandledDecoder{
+	Success: JSONCodec,
+	Error:   JSONErrorDecoder("error"),
 })
+
+// ErrorHandledDecoder is a decoder that chooses another decoder based on the
+// response status code. If the status code matches neither 2xx nor 4xx/5xx,
+// then no decoder is used.
+type ErrorHandledDecoder struct {
+	// Success is the decoder to use for 2xx status codes.
+	Success Decoder
+	// Error is the decoder to use for 4xx and 5xx status codes.
+	Error Decoder
+}
+
+func (e ErrorHandledDecoder) Decode(r *http.Response, v any) error {
+	return (StatusDecoder{
+		Status1xx: NoDecoder,
+		Status2xx: e.Success,
+		Status3xx: NoDecoder,
+		Status4xx: e.Error,
+		Status5xx: e.Error,
+	}).Decode(r, v)
+}
 
 // StatusDecoderKey is the key used to choose a status decoder.
 // Normal status codes are used as-is, while special status codes are defined as
