@@ -3,7 +3,6 @@ package hrtclient_test
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"net/http/httptest"
 
@@ -17,9 +16,7 @@ type EchoRequest struct {
 	Message string `json:"message"`
 }
 
-var _ hrt.Validator = EchoRequest{}
-
-// Validate validates the request.
+// Validate validates the request. It implements [hrt.Validator].
 func (r EchoRequest) Validate() error {
 	if r.Message == "" {
 		return fmt.Errorf("message is required")
@@ -43,11 +40,11 @@ func Example() {
 
 	client := hrtclient.NewClient(server.URL, hrtclient.CombinedCodec{
 		Encoder: hrtclient.ValidatedEncoder(hrtclient.JSONCodec),
-		Decoder: hrtclient.ValidatedDecoder(hrtclient.StatusDecoder{
+		Decoder: hrtclient.StatusDecoder{
 			hrtclient.Status2xx: hrtclient.JSONCodec,
 			hrtclient.Status4xx: hrtclient.TextErrorDecoder,
 			hrtclient.Status5xx: hrtclient.TextErrorDecoder,
-		}),
+		},
 	})
 
 	ctx := context.Background()
@@ -58,14 +55,15 @@ func Example() {
 		"X-Extra-Stuff": {"from-client"},
 	})
 
-	resp, err := Echo(ctx, client, EchoRequest{Message: "hello"})
-	if err != nil {
-		log.Fatalln(err)
-	}
+	resp, _ := Echo(ctx, client, EchoRequest{Message: "hello"})
+	fmt.Printf("1: %+v\n", resp)
 
-	fmt.Printf("%+v\n", resp)
+	_, err := Echo(ctx, client, EchoRequest{Message: ""})
+	fmt.Println("2:", err)
+
 	// Output:
-	// {Message:hello ExtraStuff:from-client}
+	// 1: {Message:hello ExtraStuff:from-client}
+	// 2: message is required
 }
 
 // newServer creates a new test server for the examples.
