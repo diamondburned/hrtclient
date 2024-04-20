@@ -15,6 +15,7 @@ import (
 // and decoding of data.
 type Client struct {
 	client  *http.Client
+	header  http.Header
 	codec   Codec
 	baseURL string
 }
@@ -40,6 +41,21 @@ func NewCustomClient(baseURL string, codec Codec, client *http.Client) *Client {
 	}
 }
 
+// WithHeader returns a new client with the given headers.
+// Existing headers are overridden.
+func (c *Client) WithHeader(header http.Header) *Client {
+	cc := *c
+	if cc.header != nil {
+		cc.header = cc.header.Clone()
+		for k, v := range header {
+			cc.header[k] = v
+		}
+	} else {
+		cc.header = header
+	}
+	return &cc
+}
+
 // Do performs the request with the given method and URL. If requestIn is not nil,
 // it is encoded into the request. If responseOut is not nil, it is decoded into
 // the response.
@@ -53,6 +69,10 @@ func (c *Client) Do(ctx context.Context, method, path string, requestIn, respons
 		if err := c.codec.Encode(req, requestIn); err != nil {
 			return err
 		}
+	}
+
+	for k, v := range c.header {
+		req.Header[k] = v
 	}
 
 	h := ctxt.FromOr(ctx, contextHeader{})
@@ -77,10 +97,10 @@ type contextHeader struct {
 	h http.Header
 }
 
-// AddContextHeader adds the given HTTP headers into the context to be used in
+// WithHeader adds the given HTTP headers into the context to be used in
 // [Client.Do]. Headers specified here will override any headers set in the
 // context.
-func AddContextHeader(ctx context.Context, header http.Header) context.Context {
+func WithHeader(ctx context.Context, header http.Header) context.Context {
 	ch := ctxt.FromOr(ctx, contextHeader{})
 	if ch.h == nil {
 		ch.h = header

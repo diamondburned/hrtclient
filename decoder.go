@@ -19,11 +19,13 @@ type Decoder interface {
 
 // DefaultDecoder is the default decoder to use.
 // It is the inverse counterpart of [hrt.DefaultOpts].
-var DefaultDecoder = StatusDecoder{
+var DefaultDecoder = ValidatedDecoder(StatusDecoder{
+	Status1xx: NoDecoder,
 	Status2xx: JSONCodec,
+	Status3xx: NoDecoder,
 	Status4xx: JSONErrorDecoder("error"),
 	Status5xx: JSONErrorDecoder("error"),
-}
+})
 
 // StatusDecoderKey is the key used to choose a status decoder.
 // Normal status codes are used as-is, while special status codes are defined as
@@ -54,18 +56,8 @@ type StatusDecoder map[StatusDecoderKey]Decoder
 func (e StatusDecoder) Decode(r *http.Response, v any) error {
 	ec, ok := e[StatusDecoderKey(r.StatusCode)]
 	if !ok {
-		switch {
-		case r.StatusCode >= 100 && r.StatusCode < 200:
-			ec, ok = e[Status1xx]
-		case r.StatusCode >= 200 && r.StatusCode < 300:
-			ec, ok = e[Status2xx]
-		case r.StatusCode >= 300 && r.StatusCode < 400:
-			ec, ok = e[Status3xx]
-		case r.StatusCode >= 400 && r.StatusCode < 500:
-			ec, ok = e[Status4xx]
-		case r.StatusCode >= 500 && r.StatusCode < 600:
-			ec, ok = e[Status5xx]
-		}
+		s := -r.StatusCode / 100
+		ec, ok = e[StatusDecoderKey(s)]
 	}
 	if !ok {
 		// Detect if we have a body at all. If we don't, then not having a
@@ -90,6 +82,26 @@ var NoDecoder Decoder = noDecoder{}
 type noDecoder struct{}
 
 func (noDecoder) Decode(_ *http.Response, _ any) error {
+	return nil
+}
+
+type validatedDecoder struct{ dec Decoder }
+
+// ValidatedDecoder creates a decoder that validates the response after decoding.
+// Types that implement [hrt.Validator] will be validated after decoding.
+func ValidatedDecoder(dec Decoder) Decoder {
+	return validatedDecoder{dec}
+}
+
+func (e validatedDecoder) Decode(r *http.Response, v any) error {
+	if err := e.dec.Decode(r, v); err != nil {
+		return err
+	}
+
+	if validator, ok := v.(hrt.Validator); ok {
+		return validator.Validate()
+	}
+
 	return nil
 }
 

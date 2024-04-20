@@ -29,3 +29,23 @@ func (e MethodEncoder) Encode(r *http.Request, v any) error {
 }
 
 // TODO: implement URLEncoder
+
+type validatedEncoder struct{ enc Encoder }
+
+// ValidatedEncoder wraps an encoder and validates the request after encoding it.
+// Types that implement [hrt.Validator] will be validated after encoding.
+func ValidatedEncoder(enc Encoder) Encoder {
+	return validatedEncoder{enc}
+}
+
+func (e validatedEncoder) Encode(r *http.Request, v any) error {
+	if err := e.enc.Encode(r, v); err != nil {
+		return err
+	}
+
+	if validator, ok := v.(hrt.Validator); ok {
+		return validator.Validate()
+	}
+
+	return nil
+}
