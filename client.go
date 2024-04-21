@@ -136,7 +136,12 @@ func Endpoint[ReqT, RespT any](method, path string) DoFunc[ReqT, RespT] {
 		}
 	}
 
-	return func(ctx context.Context, client *Client, in ReqT) (RespT, error) {
+	return func(ctx context.Context, client *Client, reqIn ReqT) (RespT, error) {
+		var in any
+		if _, isNone := any(reqIn).(hrt.None); !isNone {
+			in = reqIn
+		}
+
 		var out any
 		if newValue != nil {
 			out = newValue()
